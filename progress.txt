@@ -1,0 +1,62 @@
+Esslam Ashour
+CMSC 22300 Final Project Progress Report
+
+hgrep: a regex engine in Haskell
+---------------------------------
+
+All easy goals are done and several medium goals are working.
+
+How to build and run
+--------------------
+  cabal build
+  echo "some text" | cabal run hgrep -- "PATTERN"
+
+What works right now
+--------------------
+
+Easy goals (all complete):
+  - Literals: "foo" matches any line containing foo
+  - Sequencing: "ab" matches a followed by b
+  - Alternation: "cat|dog" matches either word
+  - Kleene star: "ab*c" matches ac, abc, abbc, ...
+  - Grouping with parentheses: "(ab)+" matches ab, abab, ...
+
+Medium goals (partially done):
+  - Plus (+): "ab+" matches ab, abb, ... but not a alone
+  - Optional (?): "colou?r" matches both color and colour
+  - Dot (.): "a.b" matches any single character between a and b
+  - Escape sequences: "\." is a literal dot, "\(" is a literal paren, etc.
+  - Partial / substring matching: the pattern matches anywhere in the
+    line, not just the full line. For example, "foo" matches "xfoox".
+
+Working examples
+--------------------------
+  printf "foo\nbar\nbaz\n"   | cabal run hgrep -- "b(a|z)+"
+    → bar, baz
+
+  printf "color\ncolour\n"   | cabal run hgrep -- "colou?r"
+    → color, colour
+
+  printf "main.hs\nREADME\n" | cabal run hgrep -- "\..+"
+    → main.hs
+
+  printf "ab\nabb\na\n"      | cabal run hgrep -- "ab+"
+    → ab, abb
+
+  printf "hello\nworld\n"    | cabal run hgrep -- "h.llo"
+    → hello
+
+What's not yet done (planned for final)
+----------------------------------------
+  - Character classes: [a-z], [^0-9], [aeiou], etc.
+  - Anchoring: ^ (start of line) and $ (end of line)
+  - Highlighted output: wrap matched spans in ANSI color codes
+  - Possibly capture groups (challenge goal)
+
+Code layout
+-----------
+  app/Regex.hs     -- the Regex ADT (Lit, Dot, Seq, Alt, Star, Plus, Quest, Empty)
+  app/Parser.hs    -- recursive-descent parser, produces Regex from a string
+  app/NFA.hs       -- Thompson's construction using the State monad for fresh IDs
+  app/Simulate.hs  -- epsilon-closure, step, matchAt, findMatches (substring search)
+  app/Main.hs      -- CLI: reads pattern from argv, filters stdin line by line
