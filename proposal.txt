@@ -1,0 +1,60 @@
+Esslam Ashour
+CMSC 22300 Final Project Proposal
+
+Regular Expression Engine
+
+Concept
+-------
+
+I want to build a regular expression engine in Haskell. The idea is a
+command-line tool called hgrep that takes a regex pattern and filters
+matching lines from standard input, like a simplified grep:
+
+    hgrep "a(b|c)*d" < input.txt
+
+The implementation would have three stages: parse the pattern string
+into a recursive ADT representing the regex syntax tree, compile that
+tree into a state machine (using an approach called Thompson's
+construction), and simulate the state machine against each line of
+input to check for matches. Each regex operator (literal, sequencing,
+alternation, repetition) maps to a small pattern of states wired
+together, and the construction builds the full machine by snapping
+these pieces together recursively. This structure lends itself well
+to ADTs and pattern matching. The state machine would be stored as a
+Map from states to transitions, and the simulator would track the
+current set of possible states using a Set. The tool would also use
+interact for IO.
+
+Goals
+-----
+
+Easy: Support literals, sequencing, alternation (|), and Kleene star
+(*) with parentheses for grouping. Parse patterns into the ADT,
+compile to a state machine, simulate it, and filter matching lines
+from stdin. At this level hgrep handles basic patterns end to end.
+
+Medium: Extend with plus (+), optional (?), character classes
+([a-z], [^0-9]), dot (.), escaping (\.), and anchoring (^, $). Support
+partial matching within a line rather than requiring the whole line to
+match, and highlight matched substrings in the output.
+
+Challenge: Implement capture groups to track which parts of the input
+matched parenthesized subexpressions. Convert the nondeterministic
+state machine to a deterministic one via subset construction as an
+optimization, and add a flag to compare the two approaches.
+
+
+Additional Topics/Resources
+---------------------------
+
+The main topic I'd need to learn beyond the course material is
+Thompson's construction and how state machine simulation works for
+regex matching. I've found an article by Russ Cox ("Regular Expression
+Matching Can Be Simple And Fast," https://swtch.com/~rsc/regexp/regexp1.html)
+that covers exactly this and walks through the construction step by
+step. It looks manageable to learn on my own from this resource. The
+State monad should help with assigning unique state IDs during
+construction, which is the main piece that goes beyond recursion
+over the ADT. I don't think I'd need dedicated class or office hours
+time for any of this, but I might ask questions on Ed if I get stuck
+on the compilation step.
