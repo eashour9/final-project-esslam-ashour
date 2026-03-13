@@ -24,7 +24,28 @@ run pat = case parseRegex pat of
   Right regex -> do
     let nfa = compile regex
     input <- getContents
-    mapM_
-      putStrLn
-      [ line | line <- lines input, not (null (findMatches nfa line))
-      ]
+    let processLine line =
+          let ms = findMatches nfa line
+           in if null ms then Nothing else Just (highlight line ms)
+    mapM_ putStrLn [out | Just out <- map processLine (lines input)]
+
+-- Wrap matched spans in bold red ANSI color codes.
+-- spans is a sorted, non-overlapping list of (start, end) pairs.
+-- "\ESC[1;31m" sets bold+red; "\ESC[0m" resets all attributes.
+-- These are standard ANSI/VT100 terminal escape sequences:
+--   https://en.wikipedia.org/wiki/ANSI_escape_code
+highlight :: String -> [(Int, Int)] -> String
+highlight line spans = go 0 line spans
+  where
+    red s = "\ESC[1;31m" ++ s ++ "\ESC[0m"
+
+    go _ rest [] = rest
+    go pos (c : cs) ms@((s, e) : rest)
+      | pos < s = c : go (pos + 1) cs ms
+      | pos == s =
+          let matchLen = e - s
+              matched = take matchLen (c : cs)
+              after = drop matchLen (c : cs)
+           in red matched ++ go e after rest
+      | otherwise = c : go (pos + 1) cs ms
+    go _ [] _ = []

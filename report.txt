@@ -1,0 +1,141 @@
+Esslam Ashour
+CMSC 22300 Final Project Report
+
+hgrep: a regex engine in Haskell
+=================================
+
+Overview
+--------
+
+hgrep is a command-line tool that filters lines from standard input
+using a regular expression, similar to grep. You give it a pattern and
+it prints only the lines that match, with the matched portion
+highlighted in bold red.
+
+    echo "hello world" | hgrep "w[a-z]+"
+
+The implementation has three stages: (1) parse the pattern string into
+a recursive data type representing the regex syntax tree, (2) compile
+that tree into a nondeterministic finite automaton using Thompson's
+construction, and (3) simulate the automaton against each line of
+input by tracking the full set of possible states at once.
+
+How to Build and Run
+--------------------
+
+    cabal build
+    echo "some text" | cabal run hgrep -- "PATTERN"
+
+Or, after building, the binary lives at:
+    dist-newstyle/build/aarch64-osx/ghc-9.6.7/.../hgrep/hgrep
+
+Features Implemented
+--------------------
+
+Easy goals (all done):
+  - Literals:        "foo" matches any line containing foo
+  - Sequencing:      "ab" matches a immediately followed by b
+  - Alternation:     "cat|dog" matches either word
+  - Kleene star:     "ab*c" matches ac, abc, abbc, ...
+  - Plus:            "ab+" matches ab, abb, ... but not a
+  - Optional:        "colou?r" matches color and colour
+  - Grouping:        "(ab)+" matches ab, abab, abababab, ...
+  - Dot:             "a.b" matches any single character between a and b
+  - Escape:          "\." is a literal dot, "\(" is a literal paren
+  - Substring match: "foo" matches "xfoox" (not just full-line match)
+
+Medium goals (all done):
+  - Character classes: "[a-z]" matches any lowercase letter;
+                       "[aeiou]" matches any vowel;
+                       "[^0-9]" matches any non-digit
+  - Anchoring: "^foo" matches only lines starting with foo;
+               "foo$" matches only lines ending with foo;
+               "^foo$" matches only the line "foo" exactly
+  - Highlighting: matched substrings are printed in bold red using
+                  ANSI escape codes
+
+
+Code Organization
+-----------------
+
+app/Regex.hs
+    Defines the Regex algebraic data type. Each constructor
+    corresponds to one regex operation: Lit for a literal character,
+    Dot for any character, Class for a character class like [a-z],
+    AnchorStart/AnchorEnd for ^ and $, Seq for sequencing, Alt for
+    alternation, Star/Plus/Quest for repetition, and Empty for the
+    empty string. Also defines CharSetItem (CSChar and CSRange) to
+    represent items inside a character class bracket.
+
+app/Parser.hs
+    A recursive-descent parser that turns a pattern string into a
+    Regex value. The grammar is stratified by precedence: parseAlt
+    handles |, parseSeq handles concatenation, parseFactor handles
+    postfix operators (* + ?), and parseAtom handles the base cases
+    (parentheses, dot, escape, character classes, anchors, literals).
+    parseClass and parseClassItems handle the [...] syntax.
+
+app/NFA.hs
+    Implements Thompson's construction using the State monad to hand
+    out fresh state IDs. Each Regex constructor maps to a small
+    fragment of states connected by transitions. The Trans type has
+    four cases: Eps (free epsilon move), On (consume a character
+    matching a predicate), AtStart (zero-width, only fires at position
+    0), and AtEnd (zero-width, only fires at end of the line).
+    Helper functions matchClass and itemHit build the predicate used
+    for character class transitions.
+
+app/Simulate.hs
+    Simulates the NFA using Thompson's set-based approach. Instead of
+    backtracking, it tracks the full set of states the NFA could be in
+    simultaneously. epsClosure takes the current position and line
+    length so it can handle AtStart and AtEnd transitions correctly.
+    matchAt tries to match starting at a given position and returns the
+    end of the longest match. findMatches scans left-to-right to find
+    all non-overlapping matches.
+
+app/Main.hs
+    Reads the pattern from argv, parses and compiles it, reads all of
+    stdin, and prints each matching line with matched substrings
+    highlighted in bold red. The highlight function inserts ANSI escape
+    codes around each match span returned by findMatches.
+
+
+Design Notes
+------------
+
+The key idea from Thompson's construction is that every regex
+corresponds to an NFA fragment with exactly one start state and one
+accept state. Fragments are composed by wiring accept states to start
+states with epsilon transitions. The simulator never backtracks;
+instead it advances the entire set of possible states forward one
+character at a time, which guarantees linear time in the length of the
+input regardless of the pattern.
+
+Anchors (^ and $) are implemented as zero-width NFA transitions that
+only fire when the simulation is at the right position in the line.
+This integrates naturally with the set-based simulation: at position 0,
+AtStart transitions fire during the epsilon closure; at position n
+(end of line), AtEnd transitions fire.
+
+Character classes compile to a single NFA transition using a Char->Bool
+predicate built from the list of CSChar and CSRange items.
+
+
+Example Session
+---------------
+
+    $ printf "foobar\nfoo\nxfoo\n" | cabal run hgrep "^foo"
+    foobar       (matched; "foo" highlighted in red)
+    foo          (matched)
+    # xfoo does not appear
+
+    $ printf "cat\ndog\nbat\n" | cabal run hgrep "[cd]at"
+    cat          (matched)
+    # dog and bat do not appear
+
+    $ printf "3.14\n314\n3x14\n" | cabal run hgrep "3\.14"
+    3.14         (matched; literal dot only)
+
+    $ printf "foo\nfoo bar\nbar\n" | cabal run hgrep "^foo$"
+    foo          (only exact match)

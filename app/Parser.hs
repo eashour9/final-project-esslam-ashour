@@ -48,6 +48,9 @@ parseFactor s = do
 
 parseAtom :: String -> Either String (Regex, String)
 parseAtom [] = Left "unexpected end of pattern"
+parseAtom ('^' : rest) = Right (AnchorStart, rest)
+parseAtom ('$' : rest) = Right (AnchorEnd, rest)
+parseAtom ('[' : rest) = parseClass rest
 parseAtom ('(' : rest) = do
   (r, rest') <- parseAlt rest
   case rest' of
@@ -59,6 +62,31 @@ parseAtom ('\\' : _) = Left "trailing backslash"
 parseAtom (c : rest)
   | c `elem` [')', '|', '*', '+', '?', ']'] = Left ("unexpected '" ++ [c] ++ "'")
   | otherwise = Right (Lit c, rest)
+
+-- Parse the interior of [...], after the opening '['.
+-- If the first char is '^', the class is negated.
+parseClass :: String -> Either String (Regex, String)
+parseClass ('^' : rest) = do
+  (items, rest') <- parseClassItems rest
+  Right (Class True items, rest')
+parseClass s = do
+  (items, rest) <- parseClassItems s
+  Right (Class False items, rest)
+
+-- Parse the list of items inside [...] up to the closing ']'.
+-- A range is two chars separated by '-', e.g. a-z.
+-- A '-' immediately before ']' is treated as a literal hyphen.
+parseClassItems :: String -> Either String ([CharSetItem], String)
+parseClassItems [] = Left "missing closing ']'"
+parseClassItems (']' : rest) = Right ([], rest)
+parseClassItems (c : rest) =
+  case rest of
+    ('-' : d : rest2) | d /= ']' -> do
+      (items, rest') <- parseClassItems rest2
+      Right (CSRange c d : items, rest')
+    _ -> do
+      (items, rest') <- parseClassItems rest
+      Right (CSChar c : items, rest')
 
 -- Smart constructor: don't build Seq nodes around Empty.
 cat :: Regex -> Regex -> Regex
